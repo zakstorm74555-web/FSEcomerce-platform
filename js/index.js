@@ -1,3 +1,4 @@
+// Import basic UI dependencies (keeping your original imports)
 import "jsvectormap/dist/jsvectormap.min.css";
 import "flatpickr/dist/flatpickr.min.css";
 import "dropzone/dist/dropzone.css";
@@ -5,114 +6,89 @@ import "../css/style.css";
 
 import Alpine from "alpinejs";
 import persist from "@alpinejs/persist";
-import flatpickr from "flatpickr";
-import Dropzone from "dropzone";
 
-import chart01 from "./components/charts/chart-01";
-import chart02 from "./components/charts/chart-02";
-import chart03 from "./components/charts/chart-03";
-import map01 from "./components/map-01";
-import "./components/calendar-init.js";
-import "./components/image-resize";
+// --- FIREBASE INTEGRATION START ---
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { getDatabase, ref, set } from "firebase/database";
+
+// Your exact config
+const firebaseConfig = {
+  apiKey: "AIzaSyCwvC1MlB-_7cmV-Hmi8MyXthGrFUGbwkY",
+  authDomain: "fscomerce.firebaseapp.com",
+  databaseURL: "https://fscomerce-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "fscomerce",
+  storageBucket: "fscomerce.firebasestorage.app",
+  messagingSenderId: "977420297543",
+  appId: "1:977420297543:web:b005a014795112c24a9862",
+  measurementId: "G-QHW4J71NNN"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const database = getDatabase(app);
+// --- FIREBASE INTEGRATION END ---
 
 Alpine.plugin(persist);
 window.Alpine = Alpine;
 Alpine.start();
 
-// Init flatpickr
-flatpickr(".datepicker", {
-  mode: "range",
-  static: true,
-  monthSelectorType: "static",
-  dateFormat: "M j",
-  defaultDate: [new Date().setDate(new Date().getDate() - 6), new Date()],
-  prevArrow:
-    '<svg class="stroke-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.25 6L9 12.25L15.25 18.5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  nextArrow:
-    '<svg class="stroke-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.75 19L15 12.75L8.75 6.5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  onReady: (selectedDates, dateStr, instance) => {
-    // eslint-disable-next-line no-param-reassign
-    instance.element.value = dateStr.replace("to", "-");
-    const customClass = instance.element.getAttribute("data-class");
-    instance.calendarContainer.classList.add(customClass);
-  },
-  onChange: (selectedDates, dateStr, instance) => {
-    // eslint-disable-next-line no-param-reassign
-    instance.element.value = dateStr.replace("to", "-");
-  },
-});
-
-// Init Dropzone
-const dropzoneArea = document.querySelectorAll("#demo-upload");
-
-if (dropzoneArea.length) {
-  let myDropzone = new Dropzone("#demo-upload", { url: "/file/post" });
-}
-
-// Document Loaded
 document.addEventListener("DOMContentLoaded", () => {
-  chart01();
-  chart02();
-  chart03();
-  map01();
-});
+  
+  // --- STORE CREATION LOGIC ---
+  const signupForm = document.getElementById("storeSignupForm");
+  const createStoreBtn = document.getElementById("createStoreBtn");
+  const errorMsg = document.getElementById("errorMsg");
 
-// Get the current year
-const year = document.getElementById("year");
-if (year) {
-  year.textContent = new Date().getFullYear();
-}
+  if (signupForm) {
+    signupForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      // Get Values
+      const fname = document.getElementById("fname").value;
+      const lname = document.getElementById("lname").value;
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const storeName = document.getElementById("storeNameInput").value;
+      const storeType = document.getElementById("storeType").value;
+      const storeSubType = document.getElementById("storeSubType").value;
 
-// For Copy//
-document.addEventListener("DOMContentLoaded", () => {
-  const copyInput = document.getElementById("copy-input");
-  if (copyInput) {
-    // Select the copy button and input field
-    const copyButton = document.getElementById("copy-button");
-    const copyText = document.getElementById("copy-text");
-    const websiteInput = document.getElementById("website-input");
+      // Generate the clean URL string
+      const storeId = storeName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const fullUrl = `${storeId}.fsc.js.org`;
 
-    // Event listener for the copy button
-    copyButton.addEventListener("click", () => {
-      // Copy the input value to the clipboard
-      navigator.clipboard.writeText(websiteInput.value).then(() => {
-        // Change the text to "Copied"
-        copyText.textContent = "Copied";
+      try {
+        createStoreBtn.textContent = "Provisioning Store...";
+        createStoreBtn.disabled = true;
 
-        // Reset the text back to "Copy" after 2 seconds
-        setTimeout(() => {
-          copyText.textContent = "Copy";
-        }, 2000);
-      });
+        // 1. Create User in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. Save Store Data to Realtime Database
+        await set(ref(database, 'stores/' + storeId), {
+          ownerId: user.uid,
+          ownerName: `${fname} ${lname}`,
+          email: email,
+          storeName: storeName,
+          storeUrl: fullUrl,
+          storeType: storeType,
+          storeCategory: storeSubType,
+          createdAt: new Date().toISOString(),
+          status: "active"
+        });
+
+        // Success! Redirect to the Admin Dashboard
+        alert(`Store Created! Your URL will be: ${fullUrl}`);
+        window.location.href = "index.html"; // Replace with your dashboard URL
+
+      } catch (error) {
+        errorMsg.textContent = error.message;
+        errorMsg.classList.remove("hidden");
+        createStoreBtn.textContent = "Create My Store";
+        createStoreBtn.disabled = false;
+      }
     });
   }
-});
-
-document.addEventListener("DOMContentLoaded", function () {
-  const searchInput = document.getElementById("search-input");
-  const searchButton = document.getElementById("search-button");
-
-  // Function to focus the search input
-  function focusSearchInput() {
-    searchInput.focus();
-  }
-
-  // Add click event listener to the search button
-  searchButton.addEventListener("click", focusSearchInput);
-
-  // Add keyboard event listener for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
-  document.addEventListener("keydown", function (event) {
-    if ((event.metaKey || event.ctrlKey) && event.key === "k") {
-      event.preventDefault(); // Prevent the default browser behavior
-      focusSearchInput();
-    }
-  });
-
-  // Add keyboard event listener for "/" key
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "/" && document.activeElement !== searchInput) {
-      event.preventDefault(); // Prevent the "/" character from being typed
-      focusSearchInput();
-    }
-  });
 });
